@@ -9,62 +9,81 @@ function init() {
   // Only run on watch pages
   if (!window.location.href.includes('youtube.com/watch')) return;
   
-  // Add download button after page loads and when navigation occurs
-  addDownloadButton();
+  // Add download button as soon as possible
+  replaceDownloadButton();
   
-  // Use MutationObserver to detect SPA navigation
+  // Use MutationObserver to detect SPA navigation and UI changes
   const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      if (mutation.type === 'childList' && mutation.addedNodes.length) {
-        // Check if we're on a watch page
-        if (window.location.href.includes('youtube.com/watch')) {
-          // Remove existing buttons to prevent duplicates
-          const existingButton = document.getElementById('yt-downloader-btn');
-          if (!existingButton) {
-            addDownloadButton();
-          }
-        }
+    if (window.location.href.includes('youtube.com/watch')) {
+      // Check if our button exists, if not try to replace YouTube's button
+      const existingButton = document.getElementById('yt-downloader-btn');
+      if (!existingButton) {
+        replaceDownloadButton();
       }
-    });
+    }
   });
   
-  // Start observing changes to detect SPA navigation
+  // Start observing changes to detect SPA navigation and UI changes
   observer.observe(document.body, { childList: true, subtree: true });
 }
 
-// Function to add the download button to the YouTube interface
-function addDownloadButton() {
-  // Wait for YouTube's UI to load
-  const checkElement = setInterval(() => {
-    const actionBar = document.querySelector('#actions-inner, #menu-container, ytd-menu-renderer');
-    
-    if (actionBar) {
-      clearInterval(checkElement);
-      
-      // Check if button already exists
-      if (document.getElementById('yt-downloader-btn')) return;
-      
-      // Create button container
-      const buttonContainer = document.createElement('div');
-      buttonContainer.className = 'yt-downloader-container';
-      
-      // Create download button
-      const downloadButton = document.createElement('button');
-      downloadButton.id = 'yt-downloader-btn';
-      downloadButton.className = 'yt-downloader-btn';
-      downloadButton.innerHTML = '<span class="yt-downloader-icon">↓</span> Download';
-      downloadButton.title = 'Download this video';
-      
-      // Add click event
-      downloadButton.addEventListener('click', handleDownloadClick);
-      
-      // Append button to container
-      buttonContainer.appendChild(downloadButton);
-      
-      // Add button to YouTube UI
-      actionBar.appendChild(buttonContainer);
+// Function to find and replace YouTube's native download button
+function replaceDownloadButton() {
+  // Try to find YouTube's native download button
+  const youtubeButtons = document.querySelectorAll('.yt-spec-button-shape-next--tonal');
+  
+  let youtubeDownloadBtn = null;
+  for (const btn of youtubeButtons) {
+    // Find the download button by checking its content
+    if (btn.textContent.includes('Download')) {
+      youtubeDownloadBtn = btn;
+      break;
     }
-  }, 1000);
+  }
+  
+  if (youtubeDownloadBtn) {
+    // Create our download button with YouTube's button styling
+    const ourButton = document.createElement('button');
+    ourButton.id = 'yt-downloader-btn';
+    ourButton.className = 'yt-spec-button-shape-next yt-spec-button-shape-next--tonal yt-spec-button-shape-next--mono yt-spec-button-shape-next--size-m yt-spec-button-shape-next--icon-leading yt-downloader-btn';
+    ourButton.innerHTML = '<span class="yt-downloader-icon">↓</span> Download';
+    ourButton.title = 'Download this video';
+    
+    // Add click event
+    ourButton.addEventListener('click', handleDownloadClick);
+    
+    // Replace YouTube's button with our button
+    youtubeDownloadBtn.parentNode.replaceChild(ourButton, youtubeDownloadBtn);
+    return;
+  }
+  
+  // If YouTube's button not found yet, try to find the menu container
+  const actionBar = document.querySelector('#actions-inner, #menu-container, ytd-menu-renderer');
+  
+  if (actionBar) {
+    // Check if button already exists
+    if (document.getElementById('yt-downloader-btn')) return;
+    
+    // Create button container
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'yt-downloader-container';
+    
+    // Create download button
+    const downloadButton = document.createElement('button');
+    downloadButton.id = 'yt-downloader-btn';
+    downloadButton.className = 'yt-spec-button-shape-next yt-spec-button-shape-next--tonal yt-spec-button-shape-next--mono yt-spec-button-shape-next--size-m yt-spec-button-shape-next--icon-leading yt-downloader-btn';
+    downloadButton.innerHTML = '<span class="yt-downloader-icon">↓</span> Download';
+    downloadButton.title = 'Download this video';
+    
+    // Add click event
+    downloadButton.addEventListener('click', handleDownloadClick);
+    
+    // Append button to container
+    buttonContainer.appendChild(downloadButton);
+    
+    // Add button to YouTube UI
+    actionBar.appendChild(buttonContainer);
+  }
 }
 
 // Function to handle click on download button
@@ -196,5 +215,12 @@ function showMessage(message, type = 'info') {
   }, 3000);
 }
 
-// Initialize the extension
-init();
+// Start initialization as soon as possible
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+// Also run init when window is fully loaded to ensure we catch everything
+window.addEventListener('load', init);
