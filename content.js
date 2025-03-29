@@ -49,7 +49,10 @@ function init() {
     }
   });
   
-  urlObserver.observe(document, { subtree: true, childList: true });
+  // Make sure document exists before observing
+  if (document && document.body) {
+    urlObserver.observe(document, { subtree: true, childList: true });
+  }
 }
 
 // Function to find and replace YouTube's native download button
@@ -147,13 +150,8 @@ async function handleDownloadClick() {
       try {
         const downloadUrl = await getDownloadUrlWithRetry(videoId, quality);
         if (downloadUrl) {
-          // Trigger download
-          const link = document.createElement('a');
-          link.href = downloadUrl;
-          link.download = `youtube-${videoId}.mp4`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
+          // Set up download without redirecting page
+          downloadWithFallback(downloadUrl, `youtube-${videoId}.mp4`);
           
           // Show success message
           showMessage('Download started!', 'success');
@@ -190,6 +188,24 @@ async function handleDownloadClick() {
       downloadButton.innerHTML = '<span class="yt-downloader-icon">↓</span> Download';
     }
   }
+}
+
+// Function to download using iframe as a fallback (avoids page navigation)
+function downloadWithFallback(url, filename) {
+  // First try the download attribute
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  
+  // Try to initiate download
+  document.body.appendChild(link);
+  link.click();
+  
+  // Remove the element after a delay
+  setTimeout(() => {
+    document.body.removeChild(link);
+  }, 100);
 }
 
 // Function to extract video ID from YouTube URL
@@ -235,14 +251,18 @@ async function getDownloadUrlWithRetry(videoId, quality, retryCount = 0) {
       } 
       // If file is not ready (status 404), retry after delay
       else if (fileResponse.status === 404 && result.comment && result.comment.includes("will soon be ready")) {
-        console.log(`File not ready yet, retrying in ${RETRY_DELAY/1000} seconds...`);
+        console.log(`File not ready yet (Attempt ${retryCount + 1}/${MAX_RETRIES}), retrying in ${RETRY_DELAY/1000} seconds...`);
+        // Show message to user
+        showMessage(`File not ready yet. Retrying... (${retryCount + 1}/${MAX_RETRIES})`, 'info');
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         return getDownloadUrlWithRetry(videoId, quality, retryCount + 1);
       }
     } catch (error) {
       console.log('Error checking file availability:', error);
-      // If we can't check the file, try to access it anyway
-      return result.file;
+      // If file check fails, wait and retry
+      console.log(`Retrying download (Attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return getDownloadUrlWithRetry(videoId, quality, retryCount + 1);
     }
     
     return result.file;
