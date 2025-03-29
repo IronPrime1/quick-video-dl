@@ -3,6 +3,8 @@
 const API_KEY = '3deef0916cmsh423d0553428cb64p192eecjsn50033a14e3fc';
 const API_HOST = 'youtube-video-fast-downloader-24-7.p.rapidapi.com';
 const PREFERRED_QUALITIES = ['137', '248', '136', '135']; // In order of preference
+const RETRY_DELAY = 3000; // Retry after 3 seconds if file not ready
+const MAX_RETRIES = 10; // Maximum number of retries to download
 
 // Main initialization function
 function init() {
@@ -17,18 +19,50 @@ function init() {
     if (window.location.href.includes('youtube.com/watch')) {
       // Check if our button exists, if not try to replace YouTube's button
       const existingButton = document.getElementById('yt-downloader-btn');
+      
+      // Check if the video ID changed (SPA navigation)
+      const currentUrl = new URL(window.location.href);
+      const videoId = currentUrl.searchParams.get('v');
+      
       if (!existingButton) {
         replaceDownloadButton();
+      } else if (existingButton.dataset.videoId !== videoId) {
+        // If button exists but video ID changed, update the button's data-video-id
+        existingButton.dataset.videoId = videoId;
       }
     }
   });
   
   // Start observing changes to detect SPA navigation and UI changes
   observer.observe(document.body, { childList: true, subtree: true });
+  
+  // Also observe URL changes (for SPA navigation)
+  let lastUrl = location.href;
+  const urlObserver = new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      if (window.location.href.includes('youtube.com/watch')) {
+        setTimeout(() => {
+          replaceDownloadButton();
+        }, 300); // Small delay to ensure YouTube's UI is loaded
+      }
+    }
+  });
+  
+  urlObserver.observe(document, { subtree: true, childList: true });
 }
 
 // Function to find and replace YouTube's native download button
 function replaceDownloadButton() {
+  const currentUrl = new URL(window.location.href);
+  const videoId = currentUrl.searchParams.get('v');
+  
+  if (!videoId) return;
+  
+  // Check if our button already exists with the correct video ID
+  const existingButton = document.getElementById('yt-downloader-btn');
+  if (existingButton && existingButton.dataset.videoId === videoId) return;
+  
   // Try to find YouTube's native download button
   const youtubeButtons = document.querySelectorAll('.yt-spec-button-shape-next--tonal');
   
@@ -45,6 +79,7 @@ function replaceDownloadButton() {
     // Create our download button with YouTube's button styling
     const ourButton = document.createElement('button');
     ourButton.id = 'yt-downloader-btn';
+    ourButton.dataset.videoId = videoId;
     ourButton.className = 'yt-spec-button-shape-next yt-spec-button-shape-next--tonal yt-spec-button-shape-next--mono yt-spec-button-shape-next--size-m yt-spec-button-shape-next--icon-leading yt-downloader-btn';
     ourButton.innerHTML = '<span class="yt-downloader-icon">↓</span> Download';
     ourButton.title = 'Download this video';
@@ -61,8 +96,11 @@ function replaceDownloadButton() {
   const actionBar = document.querySelector('#actions-inner, #menu-container, ytd-menu-renderer');
   
   if (actionBar) {
-    // Check if button already exists
-    if (document.getElementById('yt-downloader-btn')) return;
+    // Check if button already exists but needs update
+    if (existingButton) {
+      existingButton.dataset.videoId = videoId;
+      return;
+    }
     
     // Create button container
     const buttonContainer = document.createElement('div');
@@ -71,6 +109,7 @@ function replaceDownloadButton() {
     // Create download button
     const downloadButton = document.createElement('button');
     downloadButton.id = 'yt-downloader-btn';
+    downloadButton.dataset.videoId = videoId;
     downloadButton.className = 'yt-spec-button-shape-next yt-spec-button-shape-next--tonal yt-spec-button-shape-next--mono yt-spec-button-shape-next--size-m yt-spec-button-shape-next--icon-leading yt-downloader-btn';
     downloadButton.innerHTML = '<span class="yt-downloader-icon">↓</span> Download';
     downloadButton.title = 'Download this video';
@@ -89,8 +128,8 @@ function replaceDownloadButton() {
 // Function to handle click on download button
 async function handleDownloadClick() {
   try {
-    // Get video ID from URL
-    const videoId = extractVideoId(window.location.href);
+    // Get video ID from button's data attribute
+    const videoId = this.dataset.videoId || extractVideoId(window.location.href);
     if (!videoId) {
       showMessage('Could not find video ID', 'error');
       return;
@@ -106,7 +145,7 @@ async function handleDownloadClick() {
     // Try each quality in order of preference
     for (const quality of PREFERRED_QUALITIES) {
       try {
-        const downloadUrl = await getDownloadUrl(videoId, quality);
+        const downloadUrl = await getDownloadUrlWithRetry(videoId, quality);
         if (downloadUrl) {
           // Trigger download
           const link = document.createElement('a');
@@ -160,8 +199,12 @@ function extractVideoId(url) {
   return (match && match[7].length === 11) ? match[7] : null;
 }
 
-// Function to get download URL from API
-async function getDownloadUrl(videoId, quality) {
+// Function to get download URL from API with retry mechanism
+async function getDownloadUrlWithRetry(videoId, quality, retryCount = 0) {
+  if (retryCount >= MAX_RETRIES) {
+    throw new Error('Maximum retries reached');
+  }
+  
   const apiUrl = `https://youtube-video-fast-downloader-24-7.p.rapidapi.com/download_video/${videoId}?quality=${quality}`;
   
   const options = {
@@ -182,6 +225,26 @@ async function getDownloadUrl(videoId, quality) {
   
   // Check if the response contains a file URL
   if (result && result.file) {
+    // Try to access the file
+    try {
+      const fileResponse = await fetch(result.file, { method: 'HEAD' });
+      
+      // If file is ready (status 200), return the URL
+      if (fileResponse.ok) {
+        return result.file;
+      } 
+      // If file is not ready (status 404), retry after delay
+      else if (fileResponse.status === 404 && result.comment && result.comment.includes("will soon be ready")) {
+        console.log(`File not ready yet, retrying in ${RETRY_DELAY/1000} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return getDownloadUrlWithRetry(videoId, quality, retryCount + 1);
+      }
+    } catch (error) {
+      console.log('Error checking file availability:', error);
+      // If we can't check the file, try to access it anyway
+      return result.file;
+    }
+    
     return result.file;
   } else if (result && result.id && result.file) {
     return result.file;
@@ -224,3 +287,6 @@ if (document.readyState === 'loading') {
 
 // Also run init when window is fully loaded to ensure we catch everything
 window.addEventListener('load', init);
+
+// Run init immediately as well to catch the initial page load
+init();
