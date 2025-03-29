@@ -150,8 +150,8 @@ async function handleDownloadClick() {
       try {
         const downloadUrl = await getDownloadUrlWithRetry(videoId, quality);
         if (downloadUrl) {
-          // Set up download without redirecting page
-          downloadWithFallback(downloadUrl, `youtube-${videoId}.mp4`);
+          // Attempt to download the file using proper fallback methods
+          initiateDownload(downloadUrl, `youtube-${videoId}.mp4`);
           
           // Show success message
           showMessage('Download started!', 'success');
@@ -190,22 +190,45 @@ async function handleDownloadClick() {
   }
 }
 
-// Function to download using iframe as a fallback (avoids page navigation)
-function downloadWithFallback(url, filename) {
-  // First try the download attribute
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  
-  // Try to initiate download
-  document.body.appendChild(link);
-  link.click();
-  
-  // Remove the element after a delay
-  setTimeout(() => {
-    document.body.removeChild(link);
-  }, 100);
+// Function to handle the actual file download with multiple approaches
+function initiateDownload(url, filename) {
+  // Method 1: Use fetch with no-cors to test accessibility
+  fetch(url, { method: 'HEAD', mode: 'no-cors' })
+    .then(() => {
+      // Method 2: Create a link with the download attribute
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      
+      // Remove the element after a delay
+      setTimeout(() => {
+        if (link.parentNode === document.body) {
+          document.body.removeChild(link);
+        }
+      }, 100);
+    })
+    .catch(error => {
+      console.log('Trying fallback download method');
+      
+      // Method 3: Open in new tab as last resort
+      // Create an iframe to avoid redirecting the current page
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.onload = function() {
+        // Remove the iframe after it's loaded
+        setTimeout(() => {
+          if (iframe.parentNode === document.body) {
+            document.body.removeChild(iframe);
+          }
+        }, 100);
+      };
+      
+      iframe.src = url;
+      document.body.appendChild(iframe);
+    });
 }
 
 // Function to extract video ID from YouTube URL
@@ -231,43 +254,38 @@ async function getDownloadUrlWithRetry(videoId, quality, retryCount = 0) {
     }
   };
   
-  const response = await fetch(apiUrl, options);
-  
-  if (!response.ok) {
-    throw new Error(`API response error: ${response.status}`);
-  }
-  
-  const result = await response.json();
-  
-  // Check if the response contains a file URL
-  if (result && result.file) {
-    // Try to access the file
-    try {
-      const fileResponse = await fetch(result.file, { method: 'HEAD' });
-      
-      // If file is ready (status 200), return the URL
-      if (fileResponse.ok) {
-        return result.file;
-      } 
-      // If file is not ready (status 404), retry after delay
-      else if (fileResponse.status === 404 && result.comment && result.comment.includes("will soon be ready")) {
-        console.log(`File not ready yet (Attempt ${retryCount + 1}/${MAX_RETRIES}), retrying in ${RETRY_DELAY/1000} seconds...`);
-        // Show message to user
-        showMessage(`File not ready yet. Retrying... (${retryCount + 1}/${MAX_RETRIES})`, 'info');
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        return getDownloadUrlWithRetry(videoId, quality, retryCount + 1);
-      }
-    } catch (error) {
-      console.log('Error checking file availability:', error);
-      // If file check fails, wait and retry
-      console.log(`Retrying download (Attempt ${retryCount + 1}/${MAX_RETRIES})...`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      return getDownloadUrlWithRetry(videoId, quality, retryCount + 1);
+  try {
+    const response = await fetch(apiUrl, options);
+    
+    if (!response.ok) {
+      throw new Error(`API response error: ${response.status}`);
     }
     
-    return result.file;
-  } else if (result && result.id && result.file) {
-    return result.file;
+    const result = await response.json();
+    
+    // Check if the response contains a file URL
+    if (result && result.file) {
+      // We'll avoid checking with HEAD request due to CORS issues
+      // Just return the URL and let our download function handle it
+      return result.file;
+    } else if (result && result.id) {
+      // In some cases, the file might be ready but in a different format
+      return result.file || result.id;
+    }
+  } catch (error) {
+    console.log('Error fetching from API:', error);
+    
+    // If we've retried enough times, try with a different quality
+    if (retryCount >= MAX_RETRIES / 2) {
+      throw new Error('API failed too many times');
+    }
+    
+    // Show message to user about retry
+    showMessage(`API request failed. Retrying... (${retryCount + 1}/${MAX_RETRIES})`, 'info');
+    
+    // Wait and retry
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+    return getDownloadUrlWithRetry(videoId, quality, retryCount + 1);
   }
   
   throw new Error('No download URL found in API response');
@@ -292,7 +310,7 @@ function showMessage(message, type = 'info') {
   
   // Auto-remove after 3 seconds
   setTimeout(() => {
-    if (toast.parentNode) {
+    if (toast && toast.parentNode) {
       toast.remove();
     }
   }, 3000);

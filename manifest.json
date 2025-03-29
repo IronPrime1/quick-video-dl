@@ -4,8 +4,8 @@
   "name": "YouTube Video Downloader",
   "version": "1.0",
   "description": "Download YouTube videos with a single click",
-  "permissions": ["activeTab"],
-  "host_permissions": ["*://*.youtube.com/*"],
+  "permissions": ["activeTab", "downloads"],
+  "host_permissions": ["*://*.youtube.com/*", "*://*.12388101.xyz/*"],
   "content_scripts": [
     {
       "matches": ["*://*.youtube.com/*"],
