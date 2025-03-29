@@ -1,69 +1,33 @@
-# Welcome to your Lovable project
 
-## Project info
+# YouTube Video Downloader Chrome Extension
 
-**URL**: https://lovable.dev/projects/d7d6250b-c739-48f0-81aa-4f0a3a466104
+A simple Chrome extension that adds a download button to YouTube video pages.
 
-## How can I edit this code?
+## Installation
 
-There are several ways of editing your application.
+1. Download or clone this repository
+2. Open Chrome and navigate to `chrome://extensions/`
+3. Enable "Developer mode" (toggle in the top-right corner)
+4. Click "Load unpacked" and select the folder containing this extension
+5. The extension is now installed and active
 
-**Use Lovable**
+## Usage
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d7d6250b-c739-48f0-81aa-4f0a3a466104) and start prompting.
+1. Navigate to any YouTube video page (e.g., `https://www.youtube.com/watch?v=VIDEO_ID`)
+2. A "Download" button will appear next to the like/dislike buttons
+3. Click the button to download the video in the highest available quality
 
-Changes made via Lovable will be committed automatically to this repo.
+## Features
 
-**Use your preferred IDE**
+- Automatically adds a download button to YouTube video pages
+- Attempts to download in the following quality order: 137 (1080p), 248 (1080p WebM), 136 (720p), 135 (480p)
+- Shows download status through toast notifications
+- Works with YouTube's modern interface
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Technical Details
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+This extension uses the YouTube Video Fast Downloader API from RapidAPI to fetch download links for videos.
 
-Follow these steps:
+## Icon Credits
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with .
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/d7d6250b-c739-48f0-81aa-4f0a3a466104) and click on Share -> Publish.
-
-## I want to use a custom domain - is that possible?
-
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+The icons used in this extension are placeholders and should be replaced with proper icons before distribution.
